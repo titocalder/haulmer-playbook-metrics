@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>Playbook de métricas por unidad — Haulmer v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -4638,6 +4640,7 @@ function buildEcosystemUnit(){
   };
 }
 const BOARD_UNIT_KEYS=['tuu','apanio','andco','superapp'];
+const BASELINE_REV='2026-06-26';
 const BASELINE_UNITS={};
 BOARD_UNIT_KEYS.forEach(k=>{BASELINE_UNITS[k]=JSON.parse(JSON.stringify(UNITS[k].metrics));});
 const STORAGE_KEY='haulmer-playbook-state-v2';
@@ -4651,6 +4654,7 @@ let opsExpandedRuns=new Set(JSON.parse(sessionStorage.getItem('opsExpandedRuns')
 function getBoardSnapshot(note=''){
   return{
     v:1,
+    baselineRev:BASELINE_REV,
     savedAt:new Date().toISOString(),
     savedBy:localStorage.getItem(AUTHOR_KEY)||'',
     note,
@@ -4764,7 +4768,10 @@ function restoreBaseline(){
   currentUnit='tuu';
   buildSelector();
   renderUnit(currentUnit);
-  markDirty();
+  localStorage.removeItem(STORAGE_KEY);
+  lastSavedAt=null;
+  isDirty=false;
+  updatePersistUI();
   showToast('Versión base restaurada');
 }
 function openHistory(){
@@ -5385,15 +5392,22 @@ function initSegmentViews(){
 
 async function bootApp(){
   const local=loadLocalState();
-  const remote=local?null:await fetchPublishedState();
-  if(local){
+  const localOk=local&&local.baselineRev===BASELINE_REV;
+  if(localOk){
     applyBoardState(local);
     lastSavedAt=local.savedAt||null;
     if(local.currentUnit)currentUnit=local.currentUnit;
-  }else if(remote){
-    applyBoardState(remote);
-    lastSavedAt=remote.savedAt||null;
-    if(remote.currentUnit)currentUnit=remote.currentUnit;
+  }else{
+    if(local&&local.baselineRev!==BASELINE_REV){
+      localStorage.removeItem(STORAGE_KEY);
+      showToast('Tablero actualizado a la versión publicada');
+    }
+    const remote=await fetchPublishedState();
+    if(remote&&remote.baselineRev===BASELINE_REV){
+      applyBoardState(remote);
+      lastSavedAt=remote.savedAt||null;
+      if(remote.currentUnit)currentUnit=remote.currentUnit;
+    }
   }
   buildEcosystemUnit();
   buildSelector();
